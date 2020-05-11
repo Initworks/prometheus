@@ -46,6 +46,7 @@ const (
 
 // DefaultSDConfig is the default Triton SD configuration.
 var DefaultSDConfig = SDConfig{
+	ServerType:      "vm",
 	Port:            9163,
 	RefreshInterval: model.Duration(60 * time.Second),
 	Version:         1,
@@ -54,6 +55,7 @@ var DefaultSDConfig = SDConfig{
 // SDConfig is the configuration for Triton based service discovery.
 type SDConfig struct {
 	Account         string                `yaml:"account"`
+	ServerType      string                `yaml:"server_type,omitempty"`
 	DNSSuffix       string                `yaml:"dns_suffix"`
 	Endpoint        string                `yaml:"endpoint"`
 	Groups          []string              `yaml:"groups,omitempty"`
@@ -70,6 +72,9 @@ func (c *SDConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	err := unmarshal((*plain)(c))
 	if err != nil {
 		return err
+	}
+	if c.ServerType != "vm" && c.ServerType != "gz" {
+		return errors.New("triton SD configuration requires server_type to be 'vm' or 'gz'")
 	}
 	if c.Account == "" {
 		return errors.New("triton SD configuration requires an account")
@@ -96,6 +101,14 @@ type discoveryResponse struct {
 		VMImageUUID string   `json:"vm_image_uuid"`
 		VMUUID      string   `json:"vm_uuid"`
 	} `json:"containers"`
+}
+
+// GZDiscoveryResponse models a JSON response from the Triton discovery /gz/ endpoint.
+type gzDiscoveryResponse struct {
+	GZs []struct {
+		ServerUUID     string `json:"server_uuid"`
+		ServerHostname string `json:"server_hostname"`
+	} `json:"cns"`
 }
 
 // Discovery periodically performs Triton-SD requests. It implements
@@ -138,14 +151,19 @@ func New(logger log.Logger, conf *SDConfig) (*Discovery, error) {
 }
 
 func (d *Discovery) refresh(ctx context.Context) ([]*targetgroup.Group, error) {
-	var endpoint = fmt.Sprintf("https://%s:%d/v%d/discover", d.sdConfig.Endpoint, d.sdConfig.Port, d.sdConfig.Version)
+	var endpointFormat string
+	switch d.sdConfig.ServerType {
+	case "vm":
+		endpointFormat = "https://%s:%d/v%d/discover"
+	case "gz":
+		endpointFormat = "https://%s:%d/v%d/gz/discover"
+	default:
+		return nil, errors.New(fmt.Sprintf("unknown server_type '%s' in configuration", d.sdConfig.ServerType))
+	}
+	var endpoint = fmt.Sprintf(endpointFormat, d.sdConfig.Endpoint, d.sdConfig.Port, d.sdConfig.Version)
 	if len(d.sdConfig.Groups) > 0 {
 		groups := url.QueryEscape(strings.Join(d.sdConfig.Groups, ","))
 		endpoint = fmt.Sprintf("%s?groups=%s", endpoint, groups)
-	}
-
-	tg := &targetgroup.Group{
-		Source: endpoint,
 	}
 
 	req, err := http.NewRequest("GET", endpoint, nil)
@@ -168,8 +186,23 @@ func (d *Discovery) refresh(ctx context.Context) ([]*targetgroup.Group, error) {
 		return nil, errors.Wrap(err, "an error occurred when reading the response body")
 	}
 
+	switch d.sdConfig.ServerType {
+	case "vm":
+		return d.processVMResponse(data, endpoint)
+	case "gz":
+		return d.processGZResponse(data, endpoint)
+	default:
+		return nil, errors.New(fmt.Sprintf("unknown server_type '%s' in configuration", d.sdConfig.ServerType))
+	}
+}
+
+func (d *Discovery) processVMResponse(data []byte, endpoint string) ([]*targetgroup.Group, error) {
+	tg := &targetgroup.Group{
+		Source: endpoint,
+	}
+
 	dr := discoveryResponse{}
-	err = json.Unmarshal(data, &dr)
+	err := json.Unmarshal(data, &dr)
 	if err != nil {
 		return nil, errors.Wrap(err, "an error occurred unmarshaling the discovery response json")
 	}
@@ -189,6 +222,32 @@ func (d *Discovery) refresh(ctx context.Context) ([]*targetgroup.Group, error) {
 			name := "," + strings.Join(container.Groups, ",") + ","
 			labels[tritonLabelGroups] = model.LabelValue(name)
 		}
+
+		tg.Targets = append(tg.Targets, labels)
+	}
+
+	return []*targetgroup.Group{tg}, nil
+}
+
+func (d *Discovery) processGZResponse(data []byte, endpoint string) ([]*targetgroup.Group, error) {
+	tg := &targetgroup.Group{
+		Source: endpoint,
+	}
+
+	dr := gzDiscoveryResponse{}
+	err := json.Unmarshal(data, &dr)
+	if err != nil {
+		return nil, errors.Wrap(err, "an error occurred unmarshaling the gz discovery response json")
+	}
+
+	for _, gz := range dr.GZs {
+		labels := model.LabelSet{
+			tritonLabelMachineID:    model.LabelValue(gz.ServerUUID),
+			tritonLabelMachineAlias: model.LabelValue(gz.ServerHostname),
+			tritonLabelMachineBrand: model.LabelValue("gz"),
+		}
+		addr := fmt.Sprintf("%s.%s:%d", gz.ServerUUID, d.sdConfig.DNSSuffix, d.sdConfig.Port)
+		labels[model.AddressLabel] = model.LabelValue(addr)
 
 		tg.Targets = append(tg.Targets, labels)
 	}
