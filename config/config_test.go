@@ -592,6 +592,7 @@ var expectedConf = &Config{
 					{
 
 						Account:         "testAccount",
+						ServerType:      "vm",
 						DNSSuffix:       "triton.example.com",
 						Endpoint:        "triton.example.com",
 						Port:            9163,
