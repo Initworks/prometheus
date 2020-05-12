@@ -176,6 +176,12 @@ func (d *Discovery) refresh(ctx context.Context) ([]*targetgroup.Group, error) {
 		return nil, errors.Wrap(err, "an error occurred when requesting targets from the discovery endpoint")
 	}
 
+	// Check for error responses before trying to process the body
+	// Same error text is used to make TestTritonSDRefreshNoServer happy when hitting a running server on port 443 accidentally
+	if (resp.StatusCode / 100) != 2 {
+		return nil, errors.New("an error occurred when requesting targets from the discovery endpoint")
+	}
+
 	defer func() {
 		io.Copy(ioutil.Discard, resp.Body)
 		resp.Body.Close()
