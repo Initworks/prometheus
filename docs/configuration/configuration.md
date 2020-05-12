@@ -1023,17 +1023,25 @@ discovery endpoints.
 The following meta labels are available on targets during relabeling:
 
 * `__meta_triton_groups`: the list of groups belonging to the target joined by a comma separator
-* `__meta_triton_machine_alias`: the alias of the target container
-* `__meta_triton_machine_brand`: the brand of the target container
-* `__meta_triton_machine_id`: the UUID of the target container
+* `__meta_triton_machine_alias`: the alias of the target container/global zone
+* `__meta_triton_machine_brand`: the brand of the target container or "gz" for global zones
+* `__meta_triton_machine_id`: the UUID of the target container/global zone
 * `__meta_triton_machine_image`: the target containers image type
 * `__meta_triton_server_id`: the server UUID for the target container
+
+In case of global zones, the `groups`, `machine_image` and `server_id` labels are not applicable/set.
+Global zone alias (hostname) discovery depends on triton-cmon 1.7.0 or newer.
 
 ```yaml
 # The information to access the Triton discovery API.
 
 # The account to use for discovering new target containers.
 account: <string>
+
+# The type of servers to discover, can be set to:
+# * "container" to discover containers (virtual machines)
+# * "gz" to discover global zones (head/compute nodes)
+[ server_type: <string> | default = "container" ]
 
 # The DNS suffix which should be applied to target containers.
 dns_suffix: <string>

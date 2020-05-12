@@ -33,7 +33,7 @@ import (
 var (
 	conf = SDConfig{
 		Account:         "testAccount",
-		ServerType:      "vm",
+		ServerType:      "container",
 		DNSSuffix:       "triton.example.com",
 		Endpoint:        "127.0.0.1",
 		Port:            443,
@@ -43,7 +43,7 @@ var (
 	}
 	badconf = SDConfig{
 		Account:         "badTestAccount",
-		ServerType:      "vm",
+		ServerType:      "container",
 		DNSSuffix:       "bad.triton.example.com",
 		Endpoint:        "127.0.0.1",
 		Port:            443,
@@ -58,7 +58,7 @@ var (
 	}
 	groupsconf = SDConfig{
 		Account:         "testAccount",
-		ServerType:      "vm",
+		ServerType:      "container",
 		DNSSuffix:       "triton.example.com",
 		Endpoint:        "127.0.0.1",
 		Groups:          []string{"foo", "bar"},

@@ -46,7 +46,7 @@ const (
 
 // DefaultSDConfig is the default Triton SD configuration.
 var DefaultSDConfig = SDConfig{
-	ServerType:      "vm",
+	ServerType:      "container",
 	Port:            9163,
 	RefreshInterval: model.Duration(60 * time.Second),
 	Version:         1,
@@ -73,8 +73,8 @@ func (c *SDConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	if err != nil {
 		return err
 	}
-	if c.ServerType != "vm" && c.ServerType != "gz" {
-		return errors.New("triton SD configuration requires server_type to be 'vm' or 'gz'")
+	if c.ServerType != "container" && c.ServerType != "gz" {
+		return errors.New("triton SD configuration requires server_type to be 'container' or 'gz'")
 	}
 	if c.Account == "" {
 		return errors.New("triton SD configuration requires an account")
@@ -153,7 +153,7 @@ func New(logger log.Logger, conf *SDConfig) (*Discovery, error) {
 func (d *Discovery) refresh(ctx context.Context) ([]*targetgroup.Group, error) {
 	var endpointFormat string
 	switch d.sdConfig.ServerType {
-	case "vm":
+	case "container":
 		endpointFormat = "https://%s:%d/v%d/discover"
 	case "gz":
 		endpointFormat = "https://%s:%d/v%d/gz/discover"
@@ -187,7 +187,7 @@ func (d *Discovery) refresh(ctx context.Context) ([]*targetgroup.Group, error) {
 	}
 
 	switch d.sdConfig.ServerType {
-	case "vm":
+	case "container":
 		return d.processVMResponse(data, endpoint)
 	case "gz":
 		return d.processGZResponse(data, endpoint)
