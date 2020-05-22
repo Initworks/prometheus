@@ -46,7 +46,7 @@ const (
 
 // DefaultSDConfig is the default Triton SD configuration.
 var DefaultSDConfig = SDConfig{
-	ServerType:      "container",
+	Role:            "container",
 	Port:            9163,
 	RefreshInterval: model.Duration(60 * time.Second),
 	Version:         1,
@@ -73,8 +73,8 @@ func (c *SDConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	if err != nil {
 		return err
 	}
-	if c.ServerType != "container" && c.ServerType != "cn" {
-		return errors.New("triton SD configuration requires server_type to be 'container' or 'cn'")
+	if c.Role != "container" && c.Role != "cn" {
+		return errors.New("triton SD configuration requires role to be 'container' or 'cn'")
 	}
 	if c.Account == "" {
 		return errors.New("triton SD configuration requires an account")
@@ -164,13 +164,13 @@ func New(logger log.Logger, conf *SDConfig) (*Discovery, error) {
 
 func (d *Discovery) refresh(ctx context.Context) ([]*targetgroup.Group, error) {
 	var endpointFormat string
-	switch d.sdConfig.ServerType {
+	switch d.sdConfig.Role {
 	case "container":
 		endpointFormat = "https://%s:%d/v%d/discover"
 	case "cn":
 		endpointFormat = "https://%s:%d/v%d/gz/discover"
 	default:
-		return nil, errors.New(fmt.Sprintf("unknown server_type '%s' in configuration", d.sdConfig.ServerType))
+		return nil, errors.New(fmt.Sprintf("unknown role '%s' in configuration", d.sdConfig.Role))
 	}
 	var endpoint = fmt.Sprintf(endpointFormat, d.sdConfig.Endpoint, d.sdConfig.Port, d.sdConfig.Version)
 	if len(d.sdConfig.Groups) > 0 {
@@ -199,13 +199,13 @@ func (d *Discovery) refresh(ctx context.Context) ([]*targetgroup.Group, error) {
 	}
 
 	// The JSON response body is different so it needs to be processed/mapped separately.
-	switch d.sdConfig.ServerType {
+	switch d.sdConfig.Role {
 	case "container":
 		return d.processContainerResponse(data, endpoint)
 	case "cn":
 		return d.processComputeNodeResponse(data, endpoint)
 	default:
-		return nil, errors.New(fmt.Sprintf("unknown server_type '%s' in configuration", d.sdConfig.ServerType))
+		return nil, errors.New(fmt.Sprintf("unknown role '%s' in configuration", d.sdConfig.Role))
 	}
 }
 
