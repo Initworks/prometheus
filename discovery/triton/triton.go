@@ -46,7 +46,7 @@ const (
 
 // DefaultSDConfig is the default Triton SD configuration.
 var DefaultSDConfig = SDConfig{
-	ServerType:      "vm",
+	ServerType:      "container",
 	Port:            9163,
 	RefreshInterval: model.Duration(60 * time.Second),
 	Version:         1,
@@ -55,7 +55,7 @@ var DefaultSDConfig = SDConfig{
 // SDConfig is the configuration for Triton based service discovery.
 type SDConfig struct {
 	Account         string                `yaml:"account"`
-	ServerType      string                `yaml:"server_type,omitempty"`
+	Role            string                `yaml:"role,omitempty"`
 	DNSSuffix       string                `yaml:"dns_suffix"`
 	Endpoint        string                `yaml:"endpoint"`
 	Groups          []string              `yaml:"groups,omitempty"`
@@ -73,8 +73,8 @@ func (c *SDConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	if err != nil {
 		return err
 	}
-	if c.ServerType != "vm" && c.ServerType != "gz" {
-		return errors.New("triton SD configuration requires server_type to be 'container' or 'gz'")
+	if c.ServerType != "container" && c.ServerType != "cn" {
+		return errors.New("triton SD configuration requires server_type to be 'container' or 'cn'")
 	}
 	if c.Account == "" {
 		return errors.New("triton SD configuration requires an account")
@@ -92,7 +92,7 @@ func (c *SDConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
 }
 
 // DiscoveryResponse models a JSON response from the Triton discovery.
-type discoveryResponse struct {
+type DiscoveryResponse struct {
 	Containers []struct {
 		Groups      []string `json:"groups"`
 		ServerUUID  string   `json:"server_uuid"`
@@ -103,9 +103,9 @@ type discoveryResponse struct {
 	} `json:"containers"`
 }
 
-// GZDiscoveryResponse models a JSON response from the Triton discovery /gz/ endpoint.
-type gzDiscoveryResponse struct {
-	GZs []struct {
+// ComputeNodeDiscoveryResponse models a JSON response from the Triton discovery /gz/ endpoint.
+type ComputeNodeDiscoveryResponse struct {
+	ComputeNodes []struct {
 		ServerUUID     string `json:"server_uuid"`
 		ServerHostname string `json:"server_hostname"`
 	} `json:"cns"`
@@ -150,12 +150,24 @@ func New(logger log.Logger, conf *SDConfig) (*Discovery, error) {
 	return d, nil
 }
 
+// triton-cmon has two discovery endpoints:
+// https://github.com/joyent/triton-cmon/blob/master/lib/endpoints/discover.js
+//
+// The default endpoint exposes "containers", otherwise called "virtual machines" in triton,
+// which are (branded) zones running on the triton platform.
+//
+// The /gz/ endpoint exposes "compute nodes", also known as "servers" or "global zones",
+// on which the "containers" are running.
+//
+// As triton is not internally consistent in using these names,
+// the terms as used in triton-cmon are used here.
+
 func (d *Discovery) refresh(ctx context.Context) ([]*targetgroup.Group, error) {
 	var endpointFormat string
 	switch d.sdConfig.ServerType {
-	case "vm":
+	case "container":
 		endpointFormat = "https://%s:%d/v%d/discover"
-	case "gz":
+	case "cn":
 		endpointFormat = "https://%s:%d/v%d/gz/discover"
 	default:
 		return nil, errors.New(fmt.Sprintf("unknown server_type '%s' in configuration", d.sdConfig.ServerType))
@@ -186,22 +198,23 @@ func (d *Discovery) refresh(ctx context.Context) ([]*targetgroup.Group, error) {
 		return nil, errors.Wrap(err, "an error occurred when reading the response body")
 	}
 
+	// The JSON response body is different so it needs to be processed/mapped separately.
 	switch d.sdConfig.ServerType {
-	case "vm":
-		return d.processVMResponse(data, endpoint)
-	case "gz":
-		return d.processGZResponse(data, endpoint)
+	case "container":
+		return d.processContainerResponse(data, endpoint)
+	case "cn":
+		return d.processComputeNodeResponse(data, endpoint)
 	default:
 		return nil, errors.New(fmt.Sprintf("unknown server_type '%s' in configuration", d.sdConfig.ServerType))
 	}
 }
 
-func (d *Discovery) processVMResponse(data []byte, endpoint string) ([]*targetgroup.Group, error) {
+func (d *Discovery) processContainerResponse(data []byte, endpoint string) ([]*targetgroup.Group, error) {
 	tg := &targetgroup.Group{
 		Source: endpoint,
 	}
 
-	dr := discoveryResponse{}
+	dr := DiscoveryResponse{}
 	err := json.Unmarshal(data, &dr)
 	if err != nil {
 		return nil, errors.Wrap(err, "an error occurred unmarshaling the discovery response json")
@@ -229,24 +242,24 @@ func (d *Discovery) processVMResponse(data []byte, endpoint string) ([]*targetgr
 	return []*targetgroup.Group{tg}, nil
 }
 
-func (d *Discovery) processGZResponse(data []byte, endpoint string) ([]*targetgroup.Group, error) {
+func (d *Discovery) processComputeNodeResponse(data []byte, endpoint string) ([]*targetgroup.Group, error) {
 	tg := &targetgroup.Group{
 		Source: endpoint,
 	}
 
-	dr := gzDiscoveryResponse{}
+	dr := ComputeNodeDiscoveryResponse{}
 	err := json.Unmarshal(data, &dr)
 	if err != nil {
-		return nil, errors.Wrap(err, "an error occurred unmarshaling the gz discovery response json")
+		return nil, errors.Wrap(err, "an error occurred unmarshaling the compute node discovery response json")
 	}
 
-	for _, gz := range dr.GZs {
+	for _, cn := range dr.ComputeNodes {
 		labels := model.LabelSet{
-			tritonLabelMachineID:    model.LabelValue(gz.ServerUUID),
-			tritonLabelMachineAlias: model.LabelValue(gz.ServerHostname),
-			tritonLabelMachineBrand: model.LabelValue("gz"),
+			tritonLabelMachineID:    model.LabelValue(cn.ServerUUID),
+			tritonLabelMachineAlias: model.LabelValue(cn.ServerHostname),
+			tritonLabelMachineBrand: model.LabelValue("cn"),
 		}
-		addr := fmt.Sprintf("%s.%s:%d", gz.ServerUUID, d.sdConfig.DNSSuffix, d.sdConfig.Port)
+		addr := fmt.Sprintf("%s.%s:%d", cn.ServerUUID, d.sdConfig.DNSSuffix, d.sdConfig.Port)
 		labels[model.AddressLabel] = model.LabelValue(addr)
 
 		tg.Targets = append(tg.Targets, labels)

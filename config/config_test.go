@@ -590,9 +590,8 @@ var expectedConf = &Config{
 			ServiceDiscoveryConfig: sd_config.ServiceDiscoveryConfig{
 				TritonSDConfigs: []*triton.SDConfig{
 					{
-
 						Account:         "testAccount",
-						ServerType:      "vm",
+						Role:            "container",
 						DNSSuffix:       "triton.example.com",
 						Endpoint:        "triton.example.com",
 						Port:            9163,

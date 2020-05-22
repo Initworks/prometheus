@@ -33,7 +33,7 @@ import (
 var (
 	conf = SDConfig{
 		Account:         "testAccount",
-		ServerType:      "vm",
+		Role:            "container",
 		DNSSuffix:       "triton.example.com",
 		Endpoint:        "127.0.0.1",
 		Port:            443,
@@ -43,7 +43,7 @@ var (
 	}
 	badconf = SDConfig{
 		Account:         "badTestAccount",
-		ServerType:      "vm",
+		Role:            "container",
 		DNSSuffix:       "bad.triton.example.com",
 		Endpoint:        "127.0.0.1",
 		Port:            443,
@@ -58,7 +58,7 @@ var (
 	}
 	groupsconf = SDConfig{
 		Account:         "testAccount",
-		ServerType:      "vm",
+		Role:            "container",
 		DNSSuffix:       "triton.example.com",
 		Endpoint:        "127.0.0.1",
 		Groups:          []string{"foo", "bar"},
@@ -67,9 +67,9 @@ var (
 		RefreshInterval: 1,
 		TLSConfig:       config.TLSConfig{InsecureSkipVerify: true},
 	}
-	gzconf = SDConfig{
+	cnconf = SDConfig{
 		Account:         "testAccount",
-		ServerType:      "gz",
+		Role:            "cn",
 		DNSSuffix:       "triton.example.com",
 		Endpoint:        "127.0.0.1",
 		Port:            443,
@@ -116,18 +116,18 @@ func TestTritonSDNewGroupsConfig(t *testing.T) {
 	testutil.Equals(t, groupsconf.Port, td.sdConfig.Port)
 }
 
-func TestTritonSDNewGZConfig(t *testing.T) {
-	td, err := newTritonDiscovery(gzconf)
+func TestTritonSDNewCNConfig(t *testing.T) {
+	td, err := newTritonDiscovery(cnconf)
 	testutil.Ok(t, err)
 	testutil.Assert(t, td != nil, "")
 	testutil.Assert(t, td.client != nil, "")
 	testutil.Assert(t, td.interval != 0, "")
 	testutil.Assert(t, td.sdConfig != nil, "")
-	testutil.Equals(t, gzconf.ServerType, td.sdConfig.ServerType)
-	testutil.Equals(t, gzconf.Account, td.sdConfig.Account)
-	testutil.Equals(t, gzconf.DNSSuffix, td.sdConfig.DNSSuffix)
-	testutil.Equals(t, gzconf.Endpoint, td.sdConfig.Endpoint)
-	testutil.Equals(t, gzconf.Port, td.sdConfig.Port)
+	testutil.Equals(t, cnconf.Role, td.sdConfig.Role)
+	testutil.Equals(t, cnconf.Account, td.sdConfig.Account)
+	testutil.Equals(t, cnconf.DNSSuffix, td.sdConfig.DNSSuffix)
+	testutil.Equals(t, cnconf.Endpoint, td.sdConfig.Endpoint)
+	testutil.Equals(t, cnconf.Port, td.sdConfig.Port)
 }
 
 func TestTritonSDRefreshNoTargets(t *testing.T) {
@@ -183,7 +183,7 @@ func TestTritonSDRefreshCancelled(t *testing.T) {
 	testutil.Equals(t, strings.Contains(err.Error(), context.Canceled.Error()), true)
 }
 
-func TestTritonSDRefreshGZsUUIDOnly(t *testing.T) {
+func TestTritonSDRefreshCNsUUIDOnly(t *testing.T) {
 	var (
 		dstr = `{"cns":[
 		 	{
@@ -195,12 +195,12 @@ func TestTritonSDRefreshGZsUUIDOnly(t *testing.T) {
 		}`
 	)
 
-	tgts := testTritonSDRefresh(t, gzconf, dstr)
+	tgts := testTritonSDRefresh(t, cnconf, dstr)
 	testutil.Assert(t, tgts != nil, "")
 	testutil.Equals(t, 2, len(tgts))
 }
 
-func TestTritonSDRefreshGZsWithHostname(t *testing.T) {
+func TestTritonSDRefreshCNsWithHostname(t *testing.T) {
 	var (
 		dstr = `{"cns":[
 		 	{
@@ -214,7 +214,7 @@ func TestTritonSDRefreshGZsWithHostname(t *testing.T) {
 		}`
 	)
 
-	tgts := testTritonSDRefresh(t, gzconf, dstr)
+	tgts := testTritonSDRefresh(t, cnconf, dstr)
 	testutil.Assert(t, tgts != nil, "")
 	testutil.Equals(t, 2, len(tgts))
 }

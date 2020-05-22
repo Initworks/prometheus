@@ -1020,17 +1020,30 @@ Serverset data must be in the JSON format, the Thrift format is not currently su
 scrape targets from [Container Monitor](https://github.com/joyent/rfd/blob/master/rfd/0027/README.md)
 discovery endpoints.
 
-The following meta labels are available on targets during relabeling:
+One of the following `<triton_role>` types can be configured to discover targets:
+
+#### `container`
+
+The `container` role discovers one target per "virtual machine" owned by the `account`. These are smartos zones or lx/kvm/bhyve branded zones.
+
+The following meta labels are available on targets during [relabeling](#relabel_config):
 
 * `__meta_triton_groups`: the list of groups belonging to the target joined by a comma separator
-* `__meta_triton_machine_alias`: the alias of the target virtual machine/global zone
-* `__meta_triton_machine_brand`: the brand of the target virtual machine or "gz" for global zones
-* `__meta_triton_machine_id`: the UUID of the target virtual machine/global zone
-* `__meta_triton_machine_image`: the target virtual machine image type
-* `__meta_triton_server_id`: the server UUID the target virtual machine is running on
+* `__meta_triton_machine_alias`: the alias of the target container
+* `__meta_triton_machine_brand`: the brand of the target container
+* `__meta_triton_machine_id`: the UUID of the target container
+* `__meta_triton_machine_image`: the target container's image type
+* `__meta_triton_server_id`: the server UUID the target container is running on
 
-In case of global zones, the `groups`, `machine_image` and `server_id` labels are not applicable/set.
-Global zone alias (hostname) discovery depends on triton-cmon 1.7.0 or newer.
+#### `cn`
+
+The `cn` role discovers one target for per compute node (server/global zone) making up the triton infrastructure. The `account` must be a triton operator and is currently required to own at least one `container`.
+
+The following meta labels are available on targets during [relabeling](#relabel_config):
+
+* `__meta_triton_machine_alias`: the hostname of the target (requires triton-cmon 1.7.0 or newer)
+* `__meta_triton_machine_brand`: "cn" fixed value
+* `__meta_triton_machine_id`: the UUID of the target
 
 ```yaml
 # The information to access the Triton discovery API.
@@ -1038,27 +1051,27 @@ Global zone alias (hostname) discovery depends on triton-cmon 1.7.0 or newer.
 # The account to use for discovering new targets.
 account: <string>
 
-# The type of servers to discover, can be set to:
-# * "vm" to discover virtual machines (zones, bhyve vms) running on triton
-# * "gz" to discover global zones (head/compute nodes) making up the triton infrastructure
-[ server_type: <string> | default = "vm" ]
+# The type of targets to discover, can be set to:
+# * "container" to discover virtual machines (smartos zones, lx/kvm/bhyve branded zones) running on triton
+# * "cn" to discover compute nodes (servers/global zones) making up the triton infrastructure
+[ role : <string> | default = "container" ]
 
-# The DNS suffix which should be applied to target virtual machines / global zones.
+# The DNS suffix which should be applied to target.
 dns_suffix: <string>
 
 # The Triton discovery endpoint (e.g. 'cmon.us-east-3b.triton.zone'). This is
 # often the same value as dns_suffix.
 endpoint: <string>
 
-# A list of groups for which targets are retrieved, only supported for virtual machines.
-# If omitted all vm's available to the requesting account are scraped.
+# A list of groups for which targets are retrieved, only supported when `role` == `container`.
+# If omitted all containers owned by the requesting account are scraped.
 groups:
   [ - <string> ... ]
 
 # The port to use for discovery and metric scraping.
 [ port: <int> | default = 9163 ]
 
-# The interval which should be used for refreshing target virtual machines / global zones.
+# The interval which should be used for refreshing targets.
 [ refresh_interval: <duration> | default = 60s ]
 
 # The Triton discovery API version.
